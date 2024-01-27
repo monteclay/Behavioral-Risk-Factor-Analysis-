@@ -1,0 +1,517 @@
+```         
+Project Titel: Behavioral-Risk-Factor-Analysis - (2015 Data)
+
+Data Scitist: Monte Clay Jr.
+
+```
+
+```{r}
+# Libraries
+
+# Set your directory!
+
+# setwd()
+# getwd()
+
+
+library(tidyverse) 
+library(lm.beta)
+library(ggplot2)
+library(ggcorrplot)
+
+# 2015 Behavioral Risk Factors Data 
+
+brf <- read_csv("BRFSS2015_650.csv")
+```
+
+** Prediction: Does weight, the amount of hours worked per week, having children, or not influence the age of being diagnosed with diabetes ranging from 16 - 65? 
+
+1. The data was first filtered and cleaned for the variables DIABAGE2, WEIGHT2, CHILDREN, and SCNTLWK1.
+
+  - Below are detailed descriptions about the variables and what they consists of.
+
+```{r}
+
+# filtering data set and removing missing data
+filter_df <- brf %>% 
+  filter(!is.na(WEIGHT2), !is.na(CHILDREN), !is.na(SCNTLWK1), !is.na(DIABAGE2)) %>%
+  select(WEIGHT2, CHILDREN, SCNTLWK1, DIABAGE2)
+
+# replace 88 with 0. 88 represents zero per BRFSS code book
+filter_df$CHILDREN <-replace(filter_df$CHILDREN, filter_df$CHILDREN==88, 0)
+
+# replace 98 with 0. 98 represents zero per BRFSS code book
+filter_df$SCNTLWK1 <-replace(filter_df$SCNTLWK1, filter_df$SCNTLWK1==98, 0)
+
+# New data frame for analysis, filtering for specific ranges of data to fit analysis. 
+brfss_df <- filter_df %>%
+  filter(WEIGHT2 < 7777) %>%
+  filter(CHILDREN >=0 & CHILDREN <=87) %>%
+  filter(SCNTLWK1 >=0 & SCNTLWK1 <=40) %>%
+  filter(DIABAGE2 >=16 & DIABAGE2 <=65) %>%
+  as.data.frame()
+```
+
+
+2. DIABAGE2 - Variable represents the ages of individuals that were told that they have diabetes. 
+
+Variable values:
+
+  - 1-97: Age in years
+
+  - 98: Don't know/not sure
+
+  - 99: Refused to answer
+
+  - Blank: Not asked or Missing
+
+  - Diabetes variable does not have "none" for any values that equal zero
+
+  - Diabetes variable does not have extra decimals (whole numbers)
+
+  Before conducting the analysis values 98, 99, and Blank must be excluded. 
+  The data must focus solely on individuals that were told for certain that they have diabetes. 
+  Ages between 16 and 65 will be the main focus for the diabetes variable. 
+  
+
+  - This will be the Response variable for linear regression model 
+   
+   
+
+3. WEIGHT2 - Variable represents the weight of an individual (without shoes).
+
+Variable values:
+
+  - 50-0999: Weight in pounds
+
+  - 7777: Don't know/not sure
+
+  - 9000 - 9998: Weight in kilograms
+
+  - 9999 refused
+
+  - Blank: Not asked or Missing
+
+  - Values that represents pounds (50-0999) will be the main focus all other values will be excluded.
+
+  - This will be one of the response variable
+
+
+
+4. CHILDREN - Variable represents the number of children that live in an a household. 
+
+Variable consists of the following values:
+
+  - 1 -87: Number of children
+
+  - 88: None
+
+  - 99: Refuse
+
+  - Blank: Not asked or missing
+
+The value that represent 1-87 will be used. Value 88 represents none, which is converted to 0. 
+Since this is case, value 1-87 will incorporate value 88 (converted to zero). 
+
+  - Children variable will be another response variable
+
+
+
+5. SCNTLWK1 - Number of work hours per week
+
+Variable consists of the following values:
+
+  - 1-96: hours
+
+  - 97: Don't know/Not Sure
+
+  - 98: Zero
+
+  - 99: Refuse
+
+  - Blank: Not asked or Missing
+
+The Value that represent 1-96 will be used. Value 98 represents none, which will converted to 0. 
+Since this is case, value 1-96 will incorporate value 98 (converted to zero) moving forward.
+For the purpose of this analysis only hours 0-40 will be used since most only work between 0-40 hours.
+
+  - This will be the final predictor variable used.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outliers
+
+1. WEIGHT2:
+
+Within the WEIGHT2 variable there are extreme values. The method below demonstrates the removal 
+of outlier values that fall below the 25th percentile and above the 75th percentile.
+This method was chosen for many reason. For instance, including extreme values will reduce skewness.
+For this analysis obtaining data between -2 and +2 standardized deviations works best.
+This was done to focus on values that were closer and more condense to the central point (mean).
+Also, knowing that weight plays a major role in having health issues, in most cases, excluding extreme high weights and 
+very low weights will reduce skewness and provide more significant results.
+
+
+2. DIABAGE2, CHILDREN, SCNTLWK1
+
+Removal of any potential outliers from the the remaining variables are not necessary.
+As mentioned above the data for the variables DIABAGE2, CHILDREN, SCNTLWK1 were filtered 
+appropriately prior to fit the design of the analysis.
+
+```{r}
+# 1. Identify potential outliers and percentiles   
+
+ggplot(brfss_df) + 
+  geom_boxplot(mapping = aes(brfss_df$WEIGHT2)) + labs(x = "Weight") + ggtitle('Weight Box Plot')
+
+quantile(brfss_df$WEIGHT2)
+
+
+# 2. limits for WEIGHT2
+
+# Percentiles are used to obtain values between -2 and +2 standard deviations vs -3 and +3.
+upper_limit <- quantile(brfss_df$WEIGHT2, 0.9596, na.rm = TRUE)
+lower_limit <- quantile(brfss_df$WEIGHT2, 0.0404, na.rm = TRUE)
+
+
+# 3. Values outside of boundaries for WEIGHT2
+
+# This code finds the values that are above the upper limit and below the lower limit (indexes)
+outside_boundries <- which(brfss_df$WEIGHT2 > upper_limit | brfss_df$WEIGHT2 < lower_limit)
+
+
+# 4. percent remaining 
+
+# This code provides the percent remaining of the data after removing the outliers. 
+# 92.7% remaining 
+
+percentage_of_data <- (nrow(brfss_df) - length(outside_boundries))/nrow(brfss_df)*100
+
+
+# 5. brfss_df_Filtered new data set 
+
+# This code removes the outliers that were found
+
+# Checking quantile and boxplot to make sure outliers were removed
+
+brfss_df_Filtered <- brfss_df[-outside_boundries,]
+
+quantile(brfss_df_Filtered$WEIGHT2)
+
+ggplot(brfss_df_Filtered) +
+  geom_boxplot(mapping = aes(brfss_df_Filtered$WEIGHT2)) + labs(x = "Weight") + ggtitle("Weight Box Plot, Outliers Removed")
+ 
+```
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Exploratory analyses
+
+1. DIABAGE2:
+
+The variable shows the distribution of ages between 16 and 65. The distribution also provides
+a count of individuals that have diabetes. visualizing the spread of the data can be used to develop 
+additional hypothesis about certain age groups that have diabetes.
+
+Box plot: Shows the average age of a person that was told they have diabetes and data and the ages that fall before the 25th percentile and after the 75th percentile. 
+
+
+2. CHILDREN:
+
+The variable shows the number of individuals that have children in their house hold and those who do not (not the total sum of kids per house hold).
+This is broken down by the number of children and the number of people that have a specific amount of children living with them.
+By doing this, it provides insights to how many individuals are currently raising children.
+
+
+3. WEIGHT2
+
+The WEIGHT2 variable shows the distribution of weight values after removing extreme outliers.
+Along side this the box plot shows the average weight of individuals with extreme weights removed. 
+
+
+4. SCNTLWK1
+
+This variable shows the average work hours per week and values that fall below the 25th percentile.
+For the purpose of this analysis the focus was for individuals that work strictly between 0-40 hours.
+
+
+5. Corr matrix
+
+Lastly, all 4 variables were used to make a correlation matrix to view possible correlations between variables. 
+Based off the data there is very small amount of correlation between the variables (positive or negative)
+
+
+
+```{r}
+
+# 1. DIABAGE2 boxplot and Distribution of ages  
+ 
+brfss_df_Filtered %>%
+ggplot(aes(x=DIABAGE2)) +
+  geom_histogram(binwidth=3, fill="light blue", color="black", alpha=0.9) +
+  labs(x='Age', y="Average") +
+  ggtitle("Average Age of Individuals w/ Diabetes") + scale_y_continuous(expand = c(0,0)) +
+  theme_bw()
+
+ggplot(brfss_df_Filtered) +
+  geom_boxplot(mapping = aes(DIABAGE2)) + labs(x = "Age") + ggtitle("Diabetes Box plot")
+ 
+ 
+# 2. CHILDREN COUNT (Individuals that have kids)
+
+CHILDREN_COUNT  <- brfss_df_Filtered %>%
+  count(CHILDREN) %>%
+  mutate(CHILDREN_DESC = ifelse(CHILDREN > 0, "Y", "N"))
+
+colnames(CHILDREN_COUNT)[2] = "COUNT"
+
+ggplot(data = CHILDREN_COUNT, aes(x =CHILDREN, y=COUNT, )) + 
+  geom_bar(stat = "identity", fill="light green", width = 0.3, color="Black", alpha = 0.7) +
+  labs(x="Children", y="Count") +
+  ggtitle("Number of Individuals w/ or w/o Children") + scale_y_continuous(expand = c(0,20)) +
+  theme_bw()
+
+ 
+# 3. WEIGHT2 BOXPLOT and Distribution
+
+brfss_df_Filtered %>%
+ggplot(aes(x=WEIGHT2)) +
+  geom_histogram(binwidth=3, fill="light blue", color="black", alpha=0.9) +
+  labs(x='Weight') +
+  ggtitle("Weight Distribution") + scale_y_continuous(expand = c(0,0)) +
+  theme_bw()
+
+ggplot(brfss_df_Filtered) +
+  geom_boxplot(mapping = aes(WEIGHT2)) + labs(x = "Weight")  + ggtitle("Weight Box plot")
+
+
+# 4. SCNTLWK1 BOXPLOT and Distribution
+
+brfss_df_Filtered %>%
+ggplot(aes(x=SCNTLWK1)) +
+  geom_histogram(binwidth=3, fill="light blue", color="black", alpha=0.9) +
+  labs(x='Work Hours') +
+  ggtitle("Number of Hours Worked per Week") + scale_y_continuous(expand = c(0,0)) +
+  theme_bw()
+
+ggplot(brfss_df_Filtered) +
+  geom_boxplot(mapping = aes(SCNTLWK1)) + labs(x = "Work Hours")  + ggtitle("Number of Work Hours per Week Boxplot")
+
+
+# 5. Correlation matrix for all four variables 
+
+corr_matrix <- brfss_df_Filtered %>%
+  select(DIABAGE2, CHILDREN, WEIGHT2, SCNTLWK1) %>%
+  cor() %>%
+  round(4)
+
+ggcorrplot(corr_matrix, hc.order = TRUE, type = "lower", lab = TRUE,) + theme_bw() + ggtitle("Correlation Matrix") + labs(x="", y="")
+
+```
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Descriptive Stats
+
+1. DIABAGE2
+
+  - The statistic below shows the average age and variance.
+  
+  - This provides an outlook of the variability of the data associated with individuals that have diabetes. 
+
+
+2. CHILDREN
+
+  - The statistic below shows the count of individuals that have or do not have children that live in a house hold. 
+
+
+3. WEIGHT2:
+
+  - The statistic below shows the average weight and standard deviation.
+  
+  - This provides an outlook on the mean and the variability of the data associated with weight.
+
+
+4. SCNTLWK1
+
+  - The statistic below shows the average number of an individual's work hours per week and The variance.
+  
+  - This provides an outlook on the variability of the number of hours worked between 0-40.
+
+
+```{r}
+# 1. DIABAGE2 AVERAGE and Variance  
+
+DIABAGE2_AVERAGE  <- brfss_df_Filtered %>%
+  summarise(Average_Diabetes_Age = mean(DIABAGE2)) %>%
+  round()
+
+DIABAGE2_VAR  <- brfss_df_Filtered %>%
+  summarise(Varience_Diabetes_Age = round(var(DIABAGE2),2))
+ 
+
+print(DIABAGE2_AVERAGE)
+
+print(DIABAGE2_VAR)
+
+ 
+# 2. CHILDREN COUNT (Individuals that have kids)
+
+CHILDREN_COUNT  <- brfss_df_Filtered %>%
+  count(CHILDREN) %>%
+  mutate(Description = ifelse(CHILDREN > 0, "Y", "N")) 
+
+colnames(CHILDREN_COUNT)[2] = "Count"
+
+
+print(CHILDREN_COUNT)
+
+ 
+# 3. WEIGHT2 Average and Variance
+
+WEIGHT2_AVERAGE <- brfss_df_Filtered %>%
+  summarise(Average_Weight = round(mean(WEIGHT2),1)) %>%
+  mutate(Description = ifelse(Average_Weight == Average_Weight, "lb",""))
+
+WEIGHT2_VAR <- brfss_df_Filtered %>%
+  summarise(Vairence_Weight = round(var(WEIGHT2),2))
+
+
+print(WEIGHT2_AVERAGE)
+
+print(WEIGHT2_VAR)
+
+
+# 4. SCNTLWK1 Average and Variance
+
+SCNTLWK1_AVERAGE <- brfss_df_Filtered %>%
+  summarise(Average_Work_Hours = round(mean(SCNTLWK1),1)) 
+
+SCNTLWK1_VAR <- brfss_df_Filtered %>%
+  summarise(Varience_Work_Hours = round(var(SCNTLWK1),2)) 
+
+
+print(SCNTLWK1_AVERAGE)
+
+print(SCNTLWK1_VAR)
+
+```
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Regression Models 
+
+Two regression models were created to determine the following:
+
+
+Model A 
+
+Response variable: DIABAGE2  
+
+Predictor variables: CHILDREN, WEIGHT2, SCNTLWK1  
+
+When running the model the predictor variables CHILDREN and WEIGHT2 resulted in being significant with a p < 0.05. 
+However, the variable SCNTLWK1 resulted in a  p-value of 0.0774, making it insignificant. 
+
+
+- The standardize coefficients for the three variables CHILDREN, WEIGHT2, AND SCNTLWK1 are as follows:  
+  
+  CHILDREN: -0.18410317
+
+  WEIGHT2: -0.09699978
+
+  SCNTLWK1: 0.03050672
+
+
+```{r}
+# Model A, Response variable DIABAGE2
+# Predictor variables are CHILDREN, WEIGHT2, SCNTLWK1
+# The code below runs a regression model for the response variable DIABAGE2
+# The model is then summarized providing information on the model such as p values and F-stat
+# The model is than processed through lm.beta to standardize the coefficients (for other comparison measures)
+
+model_A <- brfss_df_Filtered %>%
+  select(DIABAGE2, CHILDREN, WEIGHT2, SCNTLWK1) %>%
+  lm()
+
+summary(model_A)
+
+model_A_coef <- lm.beta(model_A)
+
+print(model_A_coef)
+
+```
+
+Model B 
+
+Response variable: DIABAGE2 a
+
+Predictor variables: SCNTLWK1 and WEIGHT2
+
+When running the first model above the p-value for SCNTLWK1 had an result of 0.0774 which made this variable insignificant for model_A.
+Removing the variable CHILDREN resulted in for model_b predictor variables SCNTLWK1 and WEIGHT2 to both result in being significant with a p < 0.05.
+
+
+- The standardize coefficients for this model is as follows:
+
+  - WEIGHT2: -0.10677000  
+
+  - SCNTLWK1: 0.04019058 
+
+
+```{r}
+# Model B, Response variable: DIABAGE2
+# Predictor variables are WEIGHT2 and SCNTLWK1
+# The code below runs a regression model for the response variable DIABAGE2
+# The model is then summarized providing information on the model such as p values and F-stat
+# The model is than processed through lm.beta to standardize the coefficients (for other comparison measures)
+
+model_B <- brfss_df_Filtered %>%
+  select(DIABAGE2, WEIGHT2, SCNTLWK1) %>%
+  lm()
+
+summary(model_B)
+
+model_B_coef <- lm.beta(model_B)
+
+print(model_B_coef)
+```
+
+Conclusion:
+
+1. Based off the results above weight, number of hours worked per week, and having or not having children can determine the age of being diagnosed with having diabetes ranging from 16 - 65.
+
+
+2. Model A  
+
+  - Significant variables: CHILDREN and WEIGHT2
+  
+  - Weight had a greater influence on the having diabetes between the age of 16 - 65
+  
+  - Number of hours worked per week between 0-40 hours. Number of hours work was insignificant and little influence on having diabetes ranging from 16 - 65
+  
+  - AIC of this model was 24456.33, resulting in the best model to be used.
+
+
+3. Model B
+
+  - Significant variables: SCNTLWK1 (Number of hours worked per week) and WEIGHT2
+  
+  - Weight had a greater influence on the having diabetes between the age of 16 - 65
+  
+  - Number of hours worked per week between 0-40 was significant, however, very little and showed minimal influence on being diagnosed with diabetes ranging from ages 16 - 65
+  
+  - AIC of this model was 24565.83.
+
+
+```{r}
+# AIC is then preformed to compare models for best fit
+
+aic_model <- AIC(model_A, model_B, k = 2)
+
+print(aic_model)
+
+# Lowest AIC, selecting best model (Model A)
+best_model <- aic_model[1,2]
+
+print(best_model)
+```
+
