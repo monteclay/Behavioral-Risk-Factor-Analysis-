@@ -1,7 +1,7 @@
 
 2015 Behavioral-Risk-Factor-Analysis
 
-Refer to the code book in regards to the vairbales that were used.
+Refer to the code book to review details about the vairbales that were used.
 
 All tidyvers packages must be installed to view visuals and other statisical results 
 
